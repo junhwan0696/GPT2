@@ -175,4 +175,4 @@ def sample_gpt(model, block_size, stoi, itos, device, start_text="점심 뭐 먹
         context = torch.cat([context[:, 1:], ix], dim=1)
     return "".join(out)
 
-print(sample_gpt(model, block_size, stoi, itos, device, start_text="점심 뭐 먹을", max_new_tokens=500))
+print(sample_gpt(model, block_size, stoi, itos, device, start_text="점심 뭐 먹을래", max_new_tokens=500))
