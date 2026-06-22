@@ -7,7 +7,7 @@ from pathlib import Path
 #if not Path("input.txt").exists():
 #    !wget -q https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt
 
-file_path = 'cleaned_chat_new.txt'
+file_path = 'cleaned_chat.txt'
 text = open(file_path, "r", encoding="utf-8").read()
 chars = sorted(list(set(text)))
 stoi = {ch: i for i, ch in enumerate(chars)}
@@ -158,7 +158,7 @@ for epoch in range(200):
 # 5. Sampling
 
 @torch.no_grad()
-def sample_gpt(model, block_size, stoi, itos, device, start_text="보고싶어", max_new_tokens=400):
+def sample_gpt(model, block_size, stoi, itos, device, start_text="점심 뭐 먹을래", max_new_tokens=400):
     model.eval()
     context = torch.zeros((1, block_size), dtype=torch.long, device=device)
     for ch in start_text:
@@ -175,4 +175,4 @@ def sample_gpt(model, block_size, stoi, itos, device, start_text="보고싶어",
         context = torch.cat([context[:, 1:], ix], dim=1)
     return "".join(out)
 
-print(sample_gpt(model, block_size, stoi, itos, device, start_text="보고싶어", max_new_tokens=500))
+print(sample_gpt(model, block_size, stoi, itos, device, start_text="점심 뭐 먹을", max_new_tokens=500))
