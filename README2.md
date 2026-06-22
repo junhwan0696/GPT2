@@ -1,8 +1,42 @@
 # TinyGPT — Character-level Language Model
 
-GPT-2 아키텍처를 기반으로 구현한 경량 문자 단위(character-level) 언어 모델입니다.  
-커스텀 텍스트 데이터(`cleaned_chat_new.txt`)를 학습하여 유사한 스타일의 텍스트를 생성합니다.
-
+## 코드 진행 설명
+1. 데이터 준비
+   텍스트 파일을 읽어온 후 string을 integer로 변환해서 저장한다. 이를 DataLoader를 통해 batch_size씩 만큼 나눠 담는다.
+   
+2. multi-head attention
+   Head 클래스는 받아온 데이터에서 attention 계산을 위해 필요한 key, query, value 값을 뽑아낸다. 이후 논문에서 주어진 attention 값을
+   게산한다.
+   $Attention(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right)V$  
+   MultiHeadAttention 클래스에서는 Head 클래스에서 만든 요소들을 여러개 엮어서 multi-head attention을 만든다.  
+   이를 통해 단어들 사이의 문맥(관련성)을 파악한다.
+   
+3. Feedforward와 Block
+   FeedForward 클래스를 통해 입력 차원을 4배로 늘린 후 nn.ReLU()(<- 음수는 0으로, 양수는 그대로)를 통해 비선형적인  
+   패턴도 학습하게 하고 다시 1/4로 줄인다. 이 과정을 통해 성능이 향상된다.  
+   Block은 MultiHeadAttention과 FeedForward를 합친다.
+   
+4. TinyGPT
+   TinyGPT는 앞에서 만들어둔 것을 합친 최종적인 언어모델이다. 이 모델에서 일어나는 일을 정리하면  
+   (1) 입력된 테이터 토큰을 embedding 한다.(문자를 숫자로 변환)  
+   (2) 문장 내에서의 위치정보도 embedding 한다.  
+   (3) block(MultiHeadAttention + FeedForward)을 여러 개로 쌓는다.  
+   (4) 의미와 문장 내에서의 순서 백터가 합쳐져서 입력 벡터로 쓰이게 된다.  
+   (5) 최종적으로 계산 후 다음에 어떤 글자가 나올지 보는 점수 행렬(logit)을 return한다.
+   
+5. 학습
+   F.cross_entropy가 예측과 정답을 비교해 loss 함수를 계산한다.  
+   train_one_epoch 함수를 통해 1 epoch를 학습시킨다. 이때, 1 batch를 학습할 때마다 gradient를 초기화한다.  
+   Backpropagation을 통해 역추적하면서 gradient를 계산한다.  
+   이후 optimizer를 통해 계산된 gradient 방향으로 가중치를 조금씩 변경한다.  
+   loss 값을 확인하기 위해 기록해둔다.
+   
+6. sampling
+   @torch.no_grad()를 통해 gradient를 계산하지 않도록 한다.(학습 과정이 아니기에 필요 없음)  
+   start_text를 주면 이것을 맨 오른쪽에 두고 나머지는 0으로 채운 context를 만들고 model에 넣어서 다음 단어에  
+   대한 logit을 구하게 한다. 그리고 맨 마지막 단어에 대한 logit만 추출해서 torch.multinomial을 활용해 구한  
+   확률분포에 기반해 다음 글자를 구하고 이를 결과 list와 context에 업데이트 한다.  
+   
 ---
 
 ## 모델 아키텍처
@@ -16,41 +50,9 @@ Input tokens
            └─ LayerNorm (final)
            └─ LM Head (Linear → vocab_size)
 Output logits
-```
 
-## 코드 진행 설명
-1. 데이터 준비
-   텍스트 파일을 읽어온 후 string을 integer로 변환해서 저장한다. 이를 DataLoader를 통해 batch_size씩 만큼 나눠 담는다.
-2. multi-head attention
-   Head 클래스는 받아온 데이터에서 attention 계산을 위해 필요한 key, query, value 값을 뽑아낸다. 이후 논문에서 주어진 attention 값을
-   게산한다.
-   $Attention(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right)V$
-   MultiHeadAttention 클래스에서는 Head 클래스에서 만든 요소들을 여러개 엮어서 multi-head attention을 만든다.
-   이를 통해 단어들 사이의 문맥(관련성)을 파악한다.
-3. Feedforward와 Block
-   FeedForward 클래스를 통해 입력 차원을 4배로 늘린 후 nn.ReLU()(<- 음수는 0으로, 양수는 그대로)를 통해 비선형적인 패턴도 학습하게 하고
-   다시 1/4로 줄인다. 이 과정을 통해 성능이 향상된다.
-   Block은 MultiHeadAttention과 FeedForward를 합친다.
-4. TinyGPT
-   TinyGPT는 앞에서 만들어둔 것을 합친 최종적인 언어모델이다. 이 모델에서 일어나는 일을 정리하면
-   (1) 입력된 테이터 토큰을 embedding 한다.(문자를 숫자로 변환)
-   (2) 문장 내에서의 위치정보도 embedding 한다.
-   (3) block(MultiHeadAttention + FeedForward)을 여러 개로 쌓는다
-   (4) 의미와 문장 내에서의 순서 백터가 합쳐져서 입력 벡터로 쓰이게 된다.
-   (5) 최종적으로 계산 후 다음에 어떤 글자가 나올지 보는 점수 행렬(logit)을 return한다.
-5. 학습
-   F.cross_entropy가 예측과 정답을 비교해 loss 함수를 계산한다.
-   train_one_epoch 함수를 통해 1 epoch를 학습시킨다. 이때, 1 batch를 학습할 때마다 gradient를 초기화한다.
-   Backpropagation을 통해 역추적하면서 gradient를 계산한다.
-   이후 optimizer를 통해 계산된 gradient 방향으로 가중치를 조금씩 변경한다.
-   loss 값을 확인하기 위해 기록해둔다.
-6. sampling
-   @torch.no_grad()를 통해 gradient를 계산하지 않도록 한다.(학습 과정이 아니기에 필요 없음)
-   start_text를 주면 이것을 맨 오른쪽에 두고 나머지는 0으로 채운 context를 만들고 model에 넣어서 다음 단어에
-   대한 logit을 구하게 한다. 그리고 맨 마지막 단어에 대한 logit만 추출해서 torch.multinomial을 활용해 구한
-   확률분포에 기반해 다음 글자를 구하고 이를 결과 list와 context에 업데이트 한다.
-   
----
+
+```
 
 ## 주요 클래스
 
@@ -203,18 +205,9 @@ x = x + ffwd(ln2(x))
 
 ---
 
-## 요구사항
+## 실제 트레이닝 결과
+
+친구와의 카카오톡 대화 내역을 텍스트 파일로 추출하여 트레이닝해보았습니다. start_text를 "점심 뭐 먹을래"로 하고 sampling한 결과입니다.
+<img width="1630" height="557" alt="image" src="https://github.com/user-attachments/assets/e8b9e7ee-f91e-4162-b1cc-f84292f4f335" />
 
 ```
-torch
-```
-
----
-
-## 실행 방법
-
-```bash
-python gpt2.py
-```
-
-학습 완료 후 `"보고싶어"`를 시작 텍스트로 500자 생성 결과가 출력됩니다.
